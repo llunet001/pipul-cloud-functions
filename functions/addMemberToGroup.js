@@ -10,7 +10,7 @@ function toLocationId(index) {
 }
 
 module.exports = functions
-  .region("europe-west1")
+  .region(location)
   .https.onCall(async (data, context) => {
     const { userId } = data;
 
@@ -52,6 +52,7 @@ module.exports = functions
         console.log("Querying groups with less than 5 members...");
         const groupsSnapshot = await db
           .collection("groups")
+          .where("location", "==", userLocation)
           .where("memberCount", "<", 5)
           .limit(1)
           .get();
@@ -122,6 +123,7 @@ module.exports = functions
         console.log("Creating new group with ID:", currentGroup);
 
         transaction.set(newGroupRef, {
+          location: userLocation,
           members: [],
           hasReadNewMessages: [],
           hasVoted: [],
