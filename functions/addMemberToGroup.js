@@ -46,6 +46,7 @@ module.exports = functions
       }
 
       let currentGroup = null;
+      let shouldCallGroupNextState = false;
 
       console.log("Starting Firestore transaction...");
       await db.runTransaction(async (transaction) => {
@@ -53,6 +54,7 @@ module.exports = functions
         const groupsSnapshot = await db
           .collection("groups")
           .where("location", "==", userLocation)
+          .where("status", "in", ["initialized", "voting", "voted"])
           .where("memberCount", "<", 5)
           .limit(1)
           .get();
@@ -75,6 +77,11 @@ module.exports = functions
               members: updatedMembers,
               memberCount: admin.firestore.FieldValue.increment(1),
             });
+
+            if (groupData.memberCount === 2) {
+              shouldCallGroupNextState = true;
+            }
+
             transaction.update(userRef, {
               groups: admin.firestore.FieldValue.arrayUnion(currentGroup),
               match_token: admin.firestore.FieldValue.increment(-1),
@@ -165,16 +172,18 @@ module.exports = functions
 
       console.log(`Added ${userId} to group ${currentGroup} successfully.`);
 
-      const groupNextStateUrl = `https://${location}-${project}.cloudfunctions.net/groupNextState`;
-      try {
-        await fetch(groupNextStateUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: { groupId: currentGroup } }),
-        });
-        console.log(`groupNextState called for group ${currentGroup}`);
-      } catch (err) {
-        console.error("Failed to call groupNextState:", err);
+      if (shouldCallGroupNextState) {
+        const groupNextStateUrl = `https://${location}-${project}.cloudfunctions.net/groupNextState`;
+        try {
+          await fetch(groupNextStateUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: { groupId: currentGroup } }),
+          });
+          console.log(`groupNextState called for group ${currentGroup}`);
+        } catch (err) {
+          console.error("Failed to call groupNextState:", err);
+        }
       }
 
       return {
